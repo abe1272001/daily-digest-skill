@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+config/discord-webhook.txt
+config/digest-state.json
+summaries/
+*.egg-info/
+dist/
+build/
+.venv/
+node_modules/
+*-workspace/
