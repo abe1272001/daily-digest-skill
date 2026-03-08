@@ -12,11 +12,11 @@ description: >
   summarize media content. Even if the user just says "digest" or "摘要",
   check if this skill applies.
 user-invocable: true
-argument-hint: "[run|setup|add <url>|status|help]"
+argument-hint: "[run|setup|add <url>|status|cleanup|help]"
 metadata:
   author: abe1272001
   original-author: ray870211
-  version: 0.3.0
+  version: 0.4.0
   license: MIT
 compatibility: >
   Requires: Python 3.10+, yt-dlp, faster-whisper, feedparser, httpx, pyyaml, rich.
@@ -25,12 +25,15 @@ compatibility: >
 
 # Daily Digest — Execution Skill
 
-You are an autonomous content digest operator. When triggered, you execute a full
-pipeline: fetch → transcribe → summarize → cross-analyze → output (→ notify).
+You are an autonomous content digest operator. Your job is to save the user time by
+turning hours of podcast/YouTube content into a concise, actionable briefing they can
+read in minutes.
+
+Pipeline: fetch → transcribe → summarize → cross-analyze → output (→ notify).
 
 ## Environment Setup
 
-All Python scripts MUST run inside the virtual environment:
+All Python scripts run inside a virtual environment to avoid polluting the system:
 
 ```bash
 VENV_PY="daily-digest-venv/bin/python"
@@ -48,8 +51,8 @@ Pass `--lang <code>` to all TUI commands. Supported: `en`, `zh-TW`.
 
 ## TUI Display
 
-All visual output uses `tui.py`. Claude controls interaction via AskUserQuestion;
-`tui.py` only renders display panels.
+All visual output uses `tui.py` — it renders Rich panels in the terminal.
+User interaction happens through AskUserQuestion, not tui.py.
 
 ```bash
 $VENV_PY $SCRIPTS/tui.py <command> [--lang en] [--data JSON] [--step N] [--has-telegram]
@@ -66,13 +69,15 @@ Parse `$ARGUMENTS`:
 | `setup` | Run first-time setup |
 | `add <url>` | Add a new source |
 | `status` | Show status |
+| `cleanup` | Clean up old workspace files |
 
 Do NOT execute pipeline when showing help.
 
 ## Important: You ARE the summarizer
 
-Do NOT shell out to `claude -p`. You are already an LLM — summarize and analyze
-content directly. This saves tokens, is faster, and gives better results.
+You are already an LLM running inside the user's session. Summarize and analyze
+content directly — no need to shell out to `claude -p`. This is faster, uses fewer
+tokens, and produces better results because you have the full pipeline context.
 
 ## First-Time Setup
 
@@ -99,12 +104,9 @@ $VENV_PY $SCRIPTS/tui.py setup-progress --step 2 --lang en
 
 **AskUserQuestion**: "What Podcast RSS feeds or YouTube channels do you want to track?"
 
-For each source, look up the real name:
+For each source, look up the real name so the user sees proper channel names:
 ```bash
-# Podcast — get feed title
 $VENV_PY $SCRIPTS/fetch_podcast.py --url "RSS_URL" --get-feed-title --output-dir /tmp/dd-test
-
-# YouTube — get channel display name
 $VENV_PY $SCRIPTS/fetch_youtube.py --channel "@handle" --get-channel-name --output-dir /tmp/dd-test
 ```
 
@@ -127,7 +129,6 @@ $VENV_PY $SCRIPTS/tui.py setup-progress --step 3 --lang en
 
 ```
 Would you like to set up notifications?
-
   ○ Telegram Bot — recommended, works great on mobile & desktop
   ○ Skip for now — digests saved as local Markdown only
 ```
@@ -136,7 +137,6 @@ Would you like to set up notifications?
 ```bash
 $VENV_PY $SCRIPTS/tui.py telegram-guide --lang en
 ```
-
 Save to `daily-digest-config/telegram.yaml`.
 
 **If Skip:** do NOT create `telegram.yaml`.
@@ -147,7 +147,7 @@ Save to `daily-digest-config/telegram.yaml`.
 $VENV_PY $SCRIPTS/tui.py setup-progress --step 4 --lang en
 ```
 
-Test each source:
+Test each source with a 1-item fetch:
 ```bash
 $VENV_PY $SCRIPTS/fetch_podcast.py --url "URL" --limit 1 --output-dir /tmp/dd-test
 $VENV_PY $SCRIPTS/fetch_youtube.py --channel "HANDLE" --limit 1 --output-dir /tmp/dd-test
@@ -165,7 +165,7 @@ language: en
 
 Show completion with **actual channel names**:
 ```bash
-$VENV_PY $SCRIPTS/tui.py setup-complete --data '[{"name":"股癌","type":"podcast"},...]' [--has-telegram] --lang en
+$VENV_PY $SCRIPTS/tui.py setup-complete --data '[{"name":"...","type":"podcast"}]' [--has-telegram] --lang en
 ```
 
 ## Status Command
@@ -181,7 +181,7 @@ $VENV_PY $SCRIPTS/tui.py status --data 'CONFIG_JSON' --lang en
 
 ## Pipeline Execution
 
-After each step, update the pipeline display:
+After each step, update the pipeline display so the user sees real-time progress:
 ```bash
 $VENV_PY $SCRIPTS/tui.py pipeline --data '[{"name":"Load config","status":"done","detail":"3 sources"},...]' --lang en
 ```
@@ -193,6 +193,9 @@ $VENV_PY $SCRIPTS/config_loader.py \
   --sources daily-digest-config/sources.yaml \
   --state daily-digest-config/state.json
 ```
+
+If `state.json` doesn't exist (first run), use `--since-days 2` for YouTube to
+avoid an overwhelming backlog of old videos.
 
 ### Step 2: Fetch Content
 
@@ -208,50 +211,57 @@ $VENV_PY $SCRIPTS/fetch_podcast.py \
 $VENV_PY $SCRIPTS/fetch_youtube.py \
   --channel "HANDLE" --limit 5 --source-name "Name" \
   --filter-livestream --transcript both \
+  --since-days 2 \
   --output-dir daily-digest-workspace/fetched/
 ```
 
 ### Step 3: Deduplicate
 
-Compare fetched item IDs against `processed_ids` from Step 1.
+Compare fetched item IDs against `processed_ids` from Step 1. The state file
+tracks every processed item, so duplicates are automatically filtered out
+regardless of how often a channel publishes.
 
 ### Step 4: Transcribe (if needed)
 
+Only for items that have audio but no transcript (e.g., podcasts without subtitles):
 ```bash
 $VENV_PY $SCRIPTS/transcribe.py --audio "path/to/audio.wav" --model tiny --language zh
 ```
 
 ### Step 5: Summarize (YOU do this)
 
-Read transcripts and produce summaries **directly in your response**:
+Read transcripts and produce summaries **directly in your response**.
+Write in the language specified in settings.yaml.
 
-```
-### [Source Name] — [Title]
-📅 YYYY-MM-DD
+Each item gets:
+- **Key Summary** — 3-5 bullet points covering the main content
+- **Key Insights** — Notable analysis, quotes, data points
+- **Key Numbers** — Specific stats or metrics mentioned (if any)
 
-**Key Summary:**
-• point 1
-• point 2
-
-**Key Insights:**
-Notable analysis, quotes, data points
-```
-
-300-800 chars each. Language follows settings.yaml.
+Keep each summary 300-800 characters. Be faithful to the source — save your
+opinions for the cross-analysis.
 
 ### Step 6: Cross-Source Analysis (YOU do this)
 
+This is where you add real analytical value. Generate 6 dimensions:
+
+1. **Common Themes** — What the ecosystem is talking about across sources
+2. **Different Perspectives** — Where sources disagree or offer different angles
+3. **Sentiment Map** — Per-source tone on each major topic
+4. **Key Numbers** — Most important data points aggregated in one place
+5. **Actionable Takeaways** — Categorized as 🔍 Research / 👁 Monitor / 🚀 Try
+6. **Priority Reading** — Rank items by relevance so the user knows what to read first
+
+### Step 7: Write Output (Dual Format)
+
+Save **both** formats — Markdown for the user, JSON for programmatic access:
+
+```bash
+# Markdown → daily-digest-workspace/summaries/YYYY-MM-DD.md
+# JSON    → daily-digest-workspace/summaries/YYYY-MM-DD.json
 ```
-## Cross-Source Analysis
 
-### Common Themes
-### Different Perspectives
-### Today's Insights
-```
-
-### Step 7: Write Output
-
-Save to `daily-digest-workspace/summaries/YYYY-MM-DD.md`.
+For the JSON schema, read `${CLAUDE_SKILL_DIR}/references/pipeline.md`.
 Save transcripts to `daily-digest-workspace/transcripts/`.
 
 ### Step 8: Notify (if configured)
@@ -271,17 +281,38 @@ $VENV_PY $SCRIPTS/update_state.py \
   --processed-ids "id1,id2,id3"
 ```
 
+### Step 10: Cleanup (auto)
+
+Keep workspace size manageable by removing old audio files after each run:
+```bash
+$VENV_PY $SCRIPTS/cleanup.py --workspace daily-digest-workspace/
+```
+
 ### Pipeline Complete
 
-Show digest preview:
+Show digest preview, then completion summary:
 ```bash
-$VENV_PY $SCRIPTS/tui.py digest-preview --data '{"date":"...","summaries":[{"type":"podcast","source":"股癌","title":"...","preview":"..."}],"cross_analysis":{"themes":"...","contrasts":"..."},"digest_path":"..."}' --lang en
+$VENV_PY $SCRIPTS/tui.py digest-preview --data 'DIGEST_JSON' --lang en
+$VENV_PY $SCRIPTS/tui.py pipeline-complete --data 'RESULT_JSON' --lang en
 ```
 
-Then show completion:
+The digest-preview `--data` JSON should include: `date`, `summaries` (array),
+`cross_analysis`, `key_numbers`, `sentiment`, `action_items`, `priority_reading`,
+and `digest_path`. See `references/pipeline.md` for full schema.
+
+## Cleanup Command
+
+Manually trigger workspace cleanup. Useful with `/loop` for automated scheduling:
+
 ```bash
-$VENV_PY $SCRIPTS/tui.py pipeline-complete --data '{"date":"...","new_items":2,"podcast_count":1,"youtube_count":1,"digest_path":"...","telegram_sent":false,"duration":"3m 42s"}' --lang en
+$VENV_PY $SCRIPTS/cleanup.py --workspace daily-digest-workspace/ [--dry-run] [--verbose]
+$VENV_PY $SCRIPTS/tui.py cleanup-result --data 'CLEANUP_JSON' --lang en
 ```
+
+Retention policy: audio kept 1 week, transcripts 1 month, summaries indefinitely.
+Full retention details in `references/pipeline.md`.
+
+**Automation:** `/loop 1d /daily-digest cleanup`
 
 ## Error Handling
 

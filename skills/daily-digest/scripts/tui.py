@@ -263,6 +263,18 @@ def show_digest_preview(digest_json: str, lang: str = "en"):
         item_text.append(f"     {preview}\n", style="dim")
         content_parts.append(item_text)
 
+    # Key numbers
+    key_numbers = data.get("key_numbers", [])
+    if key_numbers:
+        num_sep = Text("  ── " + t("key_numbers", lang) + " ", style="magenta")
+        num_sep.append("─" * 30, style="magenta dim")
+        content_parts.append(num_sep)
+
+        num_text = Text()
+        for kn in key_numbers:
+            num_text.append(f"  📊 {kn}\n", style="bold")
+        content_parts.append(num_text)
+
     # Cross analysis section
     if cross_analysis:
         separator = Text("  ── " + t("cross_analysis", lang) + " ", style="yellow")
@@ -279,6 +291,48 @@ def show_digest_preview(digest_json: str, lang: str = "en"):
             ca_text.append(f"  {t('diff_views', lang)}: ", style="bold")
             ca_text.append(f"{contrasts}\n")
         content_parts.append(ca_text)
+
+    # Sentiment map
+    sentiment = data.get("sentiment", {})
+    if sentiment:
+        sent_sep = Text("  ── " + t("sentiment_map", lang) + " ", style="blue")
+        sent_sep.append("─" * 30, style="blue dim")
+        content_parts.append(sent_sep)
+
+        sent_text = Text()
+        for source, tone in sentiment.items():
+            sent_text.append(f"  {source}: ", style="bold")
+            sent_text.append(f"{tone}\n")
+        content_parts.append(sent_text)
+
+    # Actionable takeaways
+    action_items = data.get("action_items", [])
+    if action_items:
+        act_sep = Text("  ── " + t("actionable_takeaways", lang) + " ", style="green")
+        act_sep.append("─" * 30, style="green dim")
+        content_parts.append(act_sep)
+
+        act_text = Text()
+        for item in action_items:
+            category = item.get("category", "")
+            text = item.get("text", str(item) if isinstance(item, str) else "")
+            badge = {"Research": "🔍", "Monitor": "👁", "Try": "🚀"}.get(category, "📌")
+            act_text.append(f"  {badge} [{category}] ", style="bold")
+            act_text.append(f"{text}\n")
+        content_parts.append(act_text)
+
+    # Priority reading
+    priority = data.get("priority_reading", [])
+    if priority:
+        pri_sep = Text("  ── " + t("priority_reading", lang) + " ", style="red")
+        pri_sep.append("─" * 30, style="red dim")
+        content_parts.append(pri_sep)
+
+        pri_text = Text()
+        for i, item in enumerate(priority, 1):
+            pri_text.append(f"  {i}. ", style="bold red")
+            pri_text.append(f"{item}\n")
+        content_parts.append(pri_text)
 
     # Footer
     footer = Text()
@@ -314,6 +368,36 @@ def show_source_added(source_json: str, lang: str = "en"):
     ))
 
 
+def show_cleanup_result(result_json: str, lang: str = "en"):
+    """Display cleanup summary."""
+    result = json.loads(result_json)
+
+    info = Table(box=None, show_header=False, padding=(0, 2))
+    info.add_column("label", style="bold", min_width=14)
+    info.add_column("value")
+
+    info.add_row(
+        t("cleanup_deleted", lang),
+        f"{result.get('deleted_files', 0)} {t('files', lang)}",
+    )
+    info.add_row(t("cleanup_freed", lang), result.get("freed_space", "0 B"))
+    info.add_row(
+        t("cleanup_kept", lang),
+        f"{result.get('kept_files', 0)} {t('files', lang)}",
+    )
+
+    if result.get("dry_run"):
+        info.add_row("", f"[yellow]{t('cleanup_dry_run', lang)}[/yellow]")
+
+    border = "yellow" if result.get("dry_run") else "green"
+    console.print(Panel(
+        info,
+        title=t("cleanup_title", lang),
+        box=box.ROUNDED,
+        border_style=border,
+    ))
+
+
 def show_telegram_guide(lang: str = "en"):
     """Display Telegram setup instructions."""
     steps = [
@@ -342,7 +426,7 @@ def main():
     parser.add_argument("command", choices=[
         "help", "setup-progress", "setup-complete", "status",
         "pipeline", "pipeline-complete", "source-added",
-        "telegram-guide", "digest-preview",
+        "telegram-guide", "digest-preview", "cleanup-result",
     ])
     parser.add_argument("--lang", default="en", choices=["en", "zh-TW"])
     parser.add_argument("--step", type=int, default=1, help="Current step (for setup-progress)")
@@ -361,6 +445,7 @@ def main():
         "source-added": lambda: show_source_added(args.data, args.lang),
         "telegram-guide": lambda: show_telegram_guide(args.lang),
         "digest-preview": lambda: show_digest_preview(args.data, args.lang),
+        "cleanup-result": lambda: show_cleanup_result(args.data, args.lang),
     }
 
     dispatch[args.command]()

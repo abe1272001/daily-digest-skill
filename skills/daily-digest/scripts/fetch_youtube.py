@@ -9,14 +9,26 @@ import sys
 from pathlib import Path
 
 
-def list_videos(channel: str, limit: int = 5, skip_members: bool = True) -> list[dict]:
+def list_videos(
+    channel: str,
+    limit: int = 5,
+    skip_members: bool = True,
+    since_days: int | None = None,
+) -> list[dict]:
     """List recent videos from a YouTube channel using yt-dlp.
 
     By default skips member-only content by fetching extra items and filtering
     on the 'availability' field returned by yt-dlp.
+
+    If since_days is set, only include videos published within that many days.
     """
+    from datetime import datetime, timedelta
+
     # Fetch more than needed so we still have enough after filtering
     fetch_limit = limit * 2 if skip_members else limit
+    if since_days:
+        fetch_limit = max(fetch_limit, limit * 3)
+
     try:
         result = subprocess.run(
             [
@@ -40,6 +52,10 @@ def list_videos(channel: str, limit: int = 5, skip_members: bool = True) -> list
         print(f"Error listing videos: {result.stderr[:500]}", file=sys.stderr)
         return []
 
+    cutoff_date = None
+    if since_days:
+        cutoff_date = (datetime.now() - timedelta(days=since_days)).strftime("%Y%m%d")
+
     videos = []
     for line in result.stdout.strip().split("\n"):
         if not line.strip():
@@ -49,6 +65,7 @@ def list_videos(channel: str, limit: int = 5, skip_members: bool = True) -> list
             continue
 
         availability = parts[4] if len(parts) > 4 else "public"
+        upload_date = parts[2] if len(parts) > 2 else ""
 
         # Skip member-only / subscriber-only / premium content
         if skip_members and availability in (
@@ -62,10 +79,18 @@ def list_videos(channel: str, limit: int = 5, skip_members: bool = True) -> list
             )
             continue
 
+        # Skip videos older than since_days
+        if cutoff_date and upload_date and upload_date < cutoff_date:
+            print(
+                f"  Skipping old video: {parts[1][:50]} (date={upload_date})",
+                file=sys.stderr,
+            )
+            continue
+
         video = {
             "id": parts[0],
             "title": parts[1],
-            "published": parts[2] if len(parts) > 2 else "",
+            "published": upload_date,
             "duration": parts[3] if len(parts) > 3 else "",
             "availability": availability,
             "url": f"https://www.youtube.com/watch?v={parts[0]}",
@@ -246,6 +271,12 @@ def main():
         help="Include member-only videos",
     )
     parser.add_argument(
+        "--since-days",
+        type=int,
+        default=None,
+        help="Only include videos published within this many days",
+    )
+    parser.add_argument(
         "--get-channel-name",
         action="store_true",
         help="Output channel display name and exit",
@@ -266,7 +297,11 @@ def main():
     audio_dir.mkdir(exist_ok=True)
 
     print(f"Listing videos from: {args.channel}", file=sys.stderr)
-    videos = list_videos(args.channel, args.limit, skip_members=args.skip_members)
+    videos = list_videos(
+        args.channel, args.limit,
+        skip_members=args.skip_members,
+        since_days=args.since_days,
+    )
     print(f"Found {len(videos)} videos", file=sys.stderr)
 
     if args.filter_livestream:
