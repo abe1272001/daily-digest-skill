@@ -52,6 +52,26 @@ After installing the skill, ask Claude:
 整理一下今天的 YouTube 和 podcast
 ```
 
+## Data Directory
+
+All runtime data is stored in a fixed home directory (`~/.daily-digest/`), independent of your current working directory:
+
+```
+~/.daily-digest/
+  venv/                   # Python virtual environment (yt-dlp, faster-whisper, etc.)
+  config/
+    sources.yaml          # RSS feeds & YouTube channels
+    settings.yaml         # Language preference
+    state.json            # Processed item tracking (dedup)
+    telegram.yaml         # Telegram bot credentials (optional)
+  workspace/
+    fetched/              # Downloaded episodes & video metadata
+    transcripts/          # Transcribed text
+    summaries/            # Daily digest output (YYYY-MM-DD.md / .json)
+```
+
+The directory is created automatically on first run — no manual setup needed.
+
 ## Project Structure
 
 ```
@@ -66,6 +86,7 @@ skills/
       transcribe.py       # Whisper audio transcription
       notify_telegram.py  # Telegram bot notifications
       update_state.py     # Dedup state management
+      cleanup.py          # Workspace cleanup (retention policy)
     references/
       pipeline.md         # Architecture deep-dive
       scheduling.md       # Cron/launchd setup

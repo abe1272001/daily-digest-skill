@@ -22,7 +22,7 @@ SYSTEM_TOOLS = [
     ("ffmpeg", "brew install ffmpeg / apt install ffmpeg"),
 ]
 
-DEFAULT_VENV_DIR = "daily-digest-venv"
+DEFAULT_VENV_DIR = str(Path.home() / ".daily-digest" / "venv")
 
 
 def get_venv_python(venv_dir: str) -> str:

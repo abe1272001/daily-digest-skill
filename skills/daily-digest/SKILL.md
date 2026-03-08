@@ -33,10 +33,13 @@ Pipeline: fetch → transcribe → summarize → cross-analyze → output (→ n
 
 ## Environment Setup
 
-All Python scripts run inside a virtual environment to avoid polluting the system:
+All runtime data lives in a fixed home directory so it works from any CWD:
 
 ```bash
-VENV_PY="daily-digest-venv/bin/python"
+DD_HOME="$HOME/.daily-digest"
+VENV_PY="$DD_HOME/venv/bin/python"
+DD_CONFIG="$DD_HOME/config"
+DD_WORKSPACE="$DD_HOME/workspace"
 SCRIPTS="${CLAUDE_SKILL_DIR}/scripts"
 ```
 
@@ -44,22 +47,24 @@ Every script invocation: `$VENV_PY $SCRIPTS/script_name.py ...`
 
 ### Pre-flight check (run before ANY command except `setup`)
 
-Before executing pipeline, status, cleanup, or add — verify the venv exists:
+Before executing pipeline, status, cleanup, or add — ensure directory structure exists
+and venv is valid:
 
 ```bash
-test -f daily-digest-venv/bin/python && echo "OK" || echo "MISSING"
+mkdir -p "$DD_HOME/config" "$DD_HOME/workspace/fetched" "$DD_HOME/workspace/summaries" "$DD_HOME/workspace/transcripts"
+test -f "$DD_HOME/venv/bin/python" && echo "OK" || echo "MISSING"
 ```
 
 If **MISSING**, tell the user and run setup automatically:
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py" --install --venv-dir daily-digest-venv
+python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py" --install --venv-dir "$DD_HOME/venv"
 ```
 
 This prevents the pipeline from silently failing when dependencies aren't installed.
 
 ## Language / i18n
 
-Read `daily-digest-config/settings.yaml` for the `language` field. Default: `en`.
+Read `$DD_CONFIG/settings.yaml` for the `language` field. Default: `en`.
 
 ## Display Strategy
 
@@ -117,9 +122,10 @@ Use **AskUserQuestion** for all user interaction. Display progress in your respo
 
 Output: `**[1/4] ✓ Check dependencies**`
 
-Create venv and install deps (uses system Python since venv doesn't exist yet):
+Create home directory, venv, and install deps (uses system Python since venv doesn't exist yet):
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py" --install --venv-dir daily-digest-venv
+mkdir -p "$DD_HOME/config" "$DD_HOME/workspace/fetched" "$DD_HOME/workspace/summaries" "$DD_HOME/workspace/transcripts"
+python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py" --install --venv-dir "$DD_HOME/venv"
 ```
 
 After this, all subsequent commands use `$VENV_PY`.
@@ -136,7 +142,7 @@ $VENV_PY $SCRIPTS/fetch_podcast.py --url "RSS_URL" --get-feed-title --output-dir
 $VENV_PY $SCRIPTS/fetch_youtube.py --channel "@handle" --get-channel-name --output-dir /tmp/dd-test
 ```
 
-Create `daily-digest-config/sources.yaml`:
+Create `$DD_CONFIG/sources.yaml`:
 ```yaml
 sources:
   - name: "Actual Channel Name"
@@ -157,7 +163,7 @@ Would you like to set up notifications?
   ○ Skip for now — digests saved as local Markdown only
 ```
 
-**If Telegram:** ask for Bot Token and Chat ID, save to `daily-digest-config/telegram.yaml`.
+**If Telegram:** ask for Bot Token and Chat ID, save to `$DD_CONFIG/telegram.yaml`.
 **If Skip:** do NOT create `telegram.yaml`.
 
 ### [4/4] Validate
@@ -172,10 +178,10 @@ $VENV_PY $SCRIPTS/fetch_youtube.py --channel "HANDLE" --limit 1 --output-dir /tm
 
 If Telegram configured:
 ```bash
-$VENV_PY $SCRIPTS/notify_telegram.py --config daily-digest-config/telegram.yaml --test
+$VENV_PY $SCRIPTS/notify_telegram.py --config "$DD_CONFIG/telegram.yaml" --test
 ```
 
-Create `daily-digest-config/settings.yaml`:
+Create `$DD_CONFIG/settings.yaml`:
 ```yaml
 language: en
 ```
@@ -196,10 +202,10 @@ Show completion summary in your response:
 ## Status Command
 
 ```bash
-$VENV_PY $SCRIPTS/config_loader.py --sources daily-digest-config/sources.yaml --state daily-digest-config/state.json
+$VENV_PY $SCRIPTS/config_loader.py --sources "$DD_CONFIG/sources.yaml" --state "$DD_CONFIG/state.json"
 ```
 
-Parse the JSON output, check if telegram.yaml exists, then display in your response:
+Parse the JSON output, check if `$DD_CONFIG/telegram.yaml` exists, then display in your response:
 
 ```
 ## 📊 Daily Digest Status
@@ -236,8 +242,8 @@ format that you update by outputting the current state:
 
 ```bash
 $VENV_PY $SCRIPTS/config_loader.py \
-  --sources daily-digest-config/sources.yaml \
-  --state daily-digest-config/state.json
+  --sources "$DD_CONFIG/sources.yaml" \
+  --state "$DD_CONFIG/state.json"
 ```
 
 If `state.json` doesn't exist (first run), use `--since-days 2` for YouTube to
@@ -249,7 +255,7 @@ avoid an overwhelming backlog of old videos.
 ```bash
 $VENV_PY $SCRIPTS/fetch_podcast.py \
   --url "RSS_URL" --limit 5 --source-name "Name" \
-  --download-audio --output-dir daily-digest-workspace/fetched/
+  --download-audio --output-dir "$DD_WORKSPACE/fetched/"
 ```
 
 **YouTube** (auto-skips member-only content):
@@ -258,7 +264,7 @@ $VENV_PY $SCRIPTS/fetch_youtube.py \
   --channel "HANDLE" --limit 5 --source-name "Name" \
   --filter-livestream --transcript both \
   --since-days 2 \
-  --output-dir daily-digest-workspace/fetched/
+  --output-dir "$DD_WORKSPACE/fetched/"
 ```
 
 ### Step 3: Deduplicate
@@ -303,27 +309,27 @@ This is where you add real analytical value. Generate 6 dimensions:
 Save **both** formats — Markdown for the user, JSON for programmatic access:
 
 ```bash
-# Markdown → daily-digest-workspace/summaries/YYYY-MM-DD.md
-# JSON    → daily-digest-workspace/summaries/YYYY-MM-DD.json
+# Markdown → $DD_WORKSPACE/summaries/YYYY-MM-DD.md
+# JSON    → $DD_WORKSPACE/summaries/YYYY-MM-DD.json
 ```
 
 For the JSON schema, read `${CLAUDE_SKILL_DIR}/references/pipeline.md`.
-Save transcripts to `daily-digest-workspace/transcripts/`.
+Save transcripts to `$DD_WORKSPACE/transcripts/`.
 
 ### Step 8: Notify (if configured)
 
-Only if `daily-digest-config/telegram.yaml` exists:
+Only if `$DD_CONFIG/telegram.yaml` exists:
 ```bash
 $VENV_PY $SCRIPTS/notify_telegram.py \
-  --config daily-digest-config/telegram.yaml \
-  --file daily-digest-workspace/summaries/YYYY-MM-DD.md
+  --config "$DD_CONFIG/telegram.yaml" \
+  --file "$DD_WORKSPACE/summaries/YYYY-MM-DD.md"
 ```
 
 ### Step 9: Update State
 
 ```bash
 $VENV_PY $SCRIPTS/update_state.py \
-  --state daily-digest-config/state.json \
+  --state "$DD_CONFIG/state.json" \
   --processed-ids "id1,id2,id3"
 ```
 
@@ -331,7 +337,7 @@ $VENV_PY $SCRIPTS/update_state.py \
 
 Keep workspace size manageable by removing old audio files after each run:
 ```bash
-$VENV_PY $SCRIPTS/cleanup.py --workspace daily-digest-workspace/
+$VENV_PY $SCRIPTS/cleanup.py --workspace "$DD_WORKSPACE/"
 ```
 
 ### Pipeline Complete
@@ -360,7 +366,7 @@ Display the digest preview and completion summary in your response:
 ✅ **Pipeline Complete**
 - **Date:** 2026-03-08
 - **New items:** 5 (2 podcast + 3 youtube)
-- **Digest:** `daily-digest-workspace/summaries/2026-03-08.md`
+- **Digest:** `~/.daily-digest/workspace/summaries/2026-03-08.md`
 - **Notification:** ✓ Telegram sent
 ```
 
@@ -369,7 +375,7 @@ Display the digest preview and completion summary in your response:
 Manually trigger workspace cleanup. Useful with `/loop` for automated scheduling:
 
 ```bash
-$VENV_PY $SCRIPTS/cleanup.py --workspace daily-digest-workspace/ [--dry-run] [--verbose]
+$VENV_PY $SCRIPTS/cleanup.py --workspace "$DD_WORKSPACE/" [--dry-run] [--verbose]
 ```
 
 Display results in your response:
@@ -402,7 +408,7 @@ $VENV_PY $SCRIPTS/fetch_podcast.py --url "URL" --get-feed-title --output-dir /tm
 $VENV_PY $SCRIPTS/fetch_youtube.py --channel "HANDLE" --get-channel-name --output-dir /tmp/dd-test
 ```
 
-Edit `daily-digest-config/sources.yaml`, validate with a 1-item fetch, then display:
+Edit `$DD_CONFIG/sources.yaml`, validate with a 1-item fetch, then display:
 
 ```
 ## ✅ Source Added

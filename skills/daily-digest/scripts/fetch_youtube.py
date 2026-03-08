@@ -8,6 +8,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Resolve yt-dlp binary next to the current Python interpreter (works inside venvs)
+_YT_DLP = str(Path(sys.executable).parent / "yt-dlp")
+
 
 def list_videos(
     channel: str,
@@ -32,7 +35,7 @@ def list_videos(
     try:
         result = subprocess.run(
             [
-                "yt-dlp",
+                _YT_DLP,
                 "--flat-playlist",
                 "--print",
                 "%(id)s\t%(title)s\t%(upload_date)s\t%(duration)s\t%(availability)s",
@@ -110,7 +113,7 @@ def get_channel_name(channel: str) -> str:
     try:
         result = subprocess.run(
             [
-                "yt-dlp",
+                _YT_DLP,
                 "--flat-playlist",
                 "--playlist-items",
                 "0",
@@ -147,7 +150,7 @@ def fetch_subtitles(video_id: str, output_dir: Path) -> str | None:
     try:
         result = subprocess.run(
             [
-                "yt-dlp",
+                _YT_DLP,
                 "--write-subs",
                 "--write-auto-subs",
                 "--sub-lang",
@@ -213,7 +216,7 @@ def download_audio(video_id: str, output_dir: Path) -> str | None:
     try:
         subprocess.run(
             [
-                "yt-dlp",
+                _YT_DLP,
                 "-x",
                 "--audio-format",
                 "wav",
