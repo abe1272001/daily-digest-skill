@@ -11,6 +11,8 @@ description: >
   "summarize my subscriptions", or any request to periodically collect and
   summarize media content. Even if the user just says "digest" or "摘要",
   check if this skill applies.
+user-invocable: true
+argument-hint: "[run|setup|add <url>|status|help]"
 metadata:
   author: ray870211
   version: 0.1.0
@@ -24,6 +26,46 @@ compatibility: >
 
 You are an autonomous content digest operator. When triggered, you execute a full
 pipeline: fetch → transcribe → summarize → cross-analyze → notify.
+
+## Command Routing
+
+Parse `$ARGUMENTS` to determine what to do:
+
+| Command | Example | Action |
+|---------|---------|--------|
+| (empty) | `/daily-digest` | Show usage guide below |
+| `run` | `/daily-digest run` | Execute the full pipeline |
+| `setup` | `/daily-digest setup` | Run first-time setup |
+| `add <url>` | `/daily-digest add https://feeds...` | Add a new source |
+| `status` | `/daily-digest status` | Show current sources and last run info |
+| `help` | `/daily-digest help` | Show usage guide below |
+
+### Usage Guide (show when no arguments or `help`)
+
+When the user runs `/daily-digest` without arguments, respond with:
+
+```
+📰 Daily Digest — 每日內容摘要
+
+可用指令：
+
+  /daily-digest setup        首次設定（來源、Telegram bot）
+  /daily-digest run          執行一次完整摘要 pipeline
+  /daily-digest add <url>    新增 Podcast RSS 或 YouTube 頻道
+  /daily-digest status       查看目前來源與上次執行狀態
+  /daily-digest help         顯示此說明
+
+快速開始：
+  1. /daily-digest setup     → 設定來源和 Telegram
+  2. /daily-digest run       → 跑第一次摘要
+
+也可以直接說：
+  「幫我整理今天的 podcast 和 YouTube」
+  「跑一次每日摘要」
+  「新增這個 RSS 到 daily digest: https://...」
+```
+
+Do NOT proceed with any pipeline execution when showing the usage guide.
 
 ## Important: You ARE the summarizer
 
