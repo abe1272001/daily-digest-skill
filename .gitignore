@@ -1,12 +1,18 @@
 __pycache__/
 *.pyc
 .env
-config/discord-webhook.txt
-config/digest-state.json
-summaries/
 *.egg-info/
 dist/
 build/
 .venv/
 node_modules/
+
+# Runtime directories (created by users, not part of the skill)
+daily-digest-venv/
+daily-digest-config/
+daily-digest-workspace/
 *-workspace/
+
+# Installed skill copies
+.agents/
+.claude/skills/

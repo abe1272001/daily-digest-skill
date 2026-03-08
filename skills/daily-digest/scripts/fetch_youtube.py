@@ -9,17 +9,23 @@ import sys
 from pathlib import Path
 
 
-def list_videos(channel: str, limit: int = 5) -> list[dict]:
-    """List recent videos from a YouTube channel using yt-dlp."""
+def list_videos(channel: str, limit: int = 5, skip_members: bool = True) -> list[dict]:
+    """List recent videos from a YouTube channel using yt-dlp.
+
+    By default skips member-only content by fetching extra items and filtering
+    on the 'availability' field returned by yt-dlp.
+    """
+    # Fetch more than needed so we still have enough after filtering
+    fetch_limit = limit * 2 if skip_members else limit
     try:
         result = subprocess.run(
             [
                 "yt-dlp",
                 "--flat-playlist",
                 "--print",
-                "%(id)s\t%(title)s\t%(upload_date)s\t%(duration)s",
+                "%(id)s\t%(title)s\t%(upload_date)s\t%(duration)s\t%(availability)s",
                 "--playlist-end",
-                str(limit),
+                str(fetch_limit),
                 f"https://www.youtube.com/{channel}/videos",
             ],
             capture_output=True,
@@ -41,17 +47,62 @@ def list_videos(channel: str, limit: int = 5) -> list[dict]:
         parts = line.split("\t")
         if len(parts) < 2:
             continue
+
+        availability = parts[4] if len(parts) > 4 else "public"
+
+        # Skip member-only / subscriber-only / premium content
+        if skip_members and availability in (
+            "subscriber_only",
+            "needs_auth",
+            "premium_only",
+        ):
+            print(
+                f"  Skipping member-only: {parts[1][:50]} (availability={availability})",
+                file=sys.stderr,
+            )
+            continue
+
         video = {
             "id": parts[0],
             "title": parts[1],
             "published": parts[2] if len(parts) > 2 else "",
             "duration": parts[3] if len(parts) > 3 else "",
+            "availability": availability,
             "url": f"https://www.youtube.com/watch?v={parts[0]}",
             "source_type": "youtube",
         }
         videos.append(video)
 
+        # Stop once we have enough after filtering
+        if len(videos) >= limit:
+            break
+
     return videos
+
+
+def get_channel_name(channel: str) -> str:
+    """Extract the channel display name via yt-dlp."""
+    try:
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "--flat-playlist",
+                "--playlist-items",
+                "0",
+                "--print",
+                "%(channel)s",
+                f"https://www.youtube.com/{channel}/videos",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        name = result.stdout.strip().split("\n")[0].strip()
+        if name and name != "NA":
+            return name
+    except (subprocess.TimeoutExpired, IndexError):
+        pass
+    return channel
 
 
 def is_livestream(video: dict) -> bool:
@@ -182,7 +233,30 @@ def main():
         default="both",
         help="Transcript strategy: subs only, whisper only, or try subs then whisper",
     )
+    parser.add_argument(
+        "--skip-members",
+        action="store_true",
+        default=True,
+        help="Skip member-only / subscriber-only videos (default: True)",
+    )
+    parser.add_argument(
+        "--no-skip-members",
+        action="store_false",
+        dest="skip_members",
+        help="Include member-only videos",
+    )
+    parser.add_argument(
+        "--get-channel-name",
+        action="store_true",
+        help="Output channel display name and exit",
+    )
     args = parser.parse_args()
+
+    # Channel name lookup mode
+    if args.get_channel_name:
+        name = get_channel_name(args.channel)
+        print(name)
+        return
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -192,7 +266,7 @@ def main():
     audio_dir.mkdir(exist_ok=True)
 
     print(f"Listing videos from: {args.channel}", file=sys.stderr)
-    videos = list_videos(args.channel, args.limit)
+    videos = list_videos(args.channel, args.limit, skip_members=args.skip_members)
     print(f"Found {len(videos)} videos", file=sys.stderr)
 
     if args.filter_livestream:

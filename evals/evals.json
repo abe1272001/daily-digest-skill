@@ -1,0 +1,23 @@
+{
+  "skill_name": "daily-digest",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我想設定 daily digest，幫我追蹤股癌的 podcast 跟 M觀點的 YouTube 頻道，然後摘要傳到我的 Telegram",
+      "expected_output": "引導使用者完成設定：建立 sources.yaml、要 Telegram token/chat_id、檢查依賴、發測試訊息",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "跑一次每日摘要",
+      "expected_output": "按順序執行 pipeline：load config → fetch → dedup → transcribe → summarize → cross-analyze → write output → notify telegram → update state",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "幫我加一個新的 podcast 來源到 daily digest：https://feeds.soundon.fm/podcasts/some-podcast-id",
+      "expected_output": "編輯 sources.yaml 新增來源，做 test fetch 驗證 RSS 可用",
+      "files": []
+    }
+  ]
+}

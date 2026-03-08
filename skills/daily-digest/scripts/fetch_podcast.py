@@ -11,6 +11,12 @@ from pathlib import Path
 import feedparser
 
 
+def get_feed_title(url: str) -> str:
+    """Get the podcast name from the RSS feed title."""
+    feed = feedparser.parse(url)
+    return feed.feed.get("title", "Unknown Podcast")
+
+
 def fetch_feed(url: str, limit: int = 5) -> list[dict]:
     """Parse RSS feed and extract episode metadata."""
     feed = feedparser.parse(url)
@@ -87,7 +93,16 @@ def main():
     parser.add_argument(
         "--download-audio", action="store_true", help="Also download audio files"
     )
+    parser.add_argument(
+        "--get-feed-title", action="store_true", help="Output feed title and exit"
+    )
     args = parser.parse_args()
+
+    # Feed title lookup mode
+    if args.get_feed_title:
+        title = get_feed_title(args.url)
+        print(title)
+        return
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
