@@ -15,7 +15,6 @@ PYTHON_DEPS = [
     "faster-whisper",
     "httpx",
     "pyyaml",
-    "rich",
 ]
 
 SYSTEM_TOOLS = [

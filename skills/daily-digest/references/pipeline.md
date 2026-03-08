@@ -168,23 +168,6 @@ programmatic access to historical digest data.
 }
 ```
 
-### TUI digest-preview data format
-
-The `tui.py digest-preview --data` expects JSON with these fields:
-
-```json
-{
-  "date": "2026-03-08",
-  "summaries": [{"type": "podcast", "source": "Source", "title": "Title", "preview": "..."}],
-  "cross_analysis": {"themes": "...", "contrasts": "..."},
-  "key_numbers": ["stat 1", "stat 2"],
-  "sentiment": {"Source A": "bullish"},
-  "action_items": [{"category": "Research", "text": "..."}],
-  "priority_reading": ["Item 1", "Item 2"],
-  "digest_path": "daily-digest-workspace/summaries/2026-03-08.md"
-}
-```
-
 ## Workspace Retention
 
 The `cleanup.py` script implements tiered retention to keep workspace size

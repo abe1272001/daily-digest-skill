@@ -16,10 +16,10 @@ argument-hint: "[run|setup|add <url>|status|cleanup|help]"
 metadata:
   author: abe1272001
   original-author: ray870211
-  version: 0.4.0
+  version: 0.5.0
   license: MIT
 compatibility: >
-  Requires: Python 3.10+, yt-dlp, faster-whisper, feedparser, httpx, pyyaml, rich.
+  Requires: Python 3.10+, yt-dlp, faster-whisper, feedparser, httpx, pyyaml.
   macOS/Linux. Claude CLI authenticated.
 ---
 
@@ -42,21 +42,34 @@ SCRIPTS="${CLAUDE_SKILL_DIR}/scripts"
 
 Every script invocation: `$VENV_PY $SCRIPTS/script_name.py ...`
 
-If `daily-digest-venv/` does not exist, run setup first.
+### Pre-flight check (run before ANY command except `setup`)
+
+Before executing pipeline, status, cleanup, or add — verify the venv exists:
+
+```bash
+test -f daily-digest-venv/bin/python && echo "OK" || echo "MISSING"
+```
+
+If **MISSING**, tell the user and run setup automatically:
+```bash
+python3 "${CLAUDE_SKILL_DIR}/scripts/setup.py" --install --venv-dir daily-digest-venv
+```
+
+This prevents the pipeline from silently failing when dependencies aren't installed.
 
 ## Language / i18n
 
 Read `daily-digest-config/settings.yaml` for the `language` field. Default: `en`.
-Pass `--lang <code>` to all TUI commands. Supported: `en`, `zh-TW`.
 
-## TUI Display
+## Display Strategy
 
-All visual output uses `tui.py` — it renders Rich panels in the terminal.
-User interaction happens through AskUserQuestion, not tui.py.
+Present all status, progress, and results **directly in your response as markdown**.
+Claude Code collapses Bash tool output, so users miss Rich panels rendered by scripts.
+Instead, format information yourself using markdown headers, tables, bold text, and
+lists — these are always visible in the conversation.
 
-```bash
-$VENV_PY $SCRIPTS/tui.py <command> [--lang en] [--data JSON] [--step N] [--has-telegram]
-```
+Use scripts only for **data gathering** (fetch, transcribe, config loading, etc.),
+then format and present the results in your own response text.
 
 ## Command Routing
 
@@ -64,7 +77,7 @@ Parse `$ARGUMENTS`:
 
 | Command | Action |
 |---------|--------|
-| (empty) / `help` | Show help: `$VENV_PY $SCRIPTS/tui.py help` |
+| (empty) / `help` | Show help (see template below) |
 | `run` | Execute the full pipeline |
 | `setup` | Run first-time setup |
 | `add <url>` | Add a new source |
@@ -72,6 +85,23 @@ Parse `$ARGUMENTS`:
 | `cleanup` | Clean up old workspace files |
 
 Do NOT execute pipeline when showing help.
+
+### Help display
+
+When showing help, output this directly (adapt language per settings):
+
+```
+## 📰 Daily Digest v0.5.0
+
+| Command | Description |
+|---------|-------------|
+| `/daily-digest setup` | First-time setup (sources + notifications) |
+| `/daily-digest run` | Run the full digest pipeline |
+| `/daily-digest add <url>` | Add a Podcast or YouTube source |
+| `/daily-digest status` | View sources and run status |
+| `/daily-digest cleanup` | Clean up old workspace files |
+| `/daily-digest help` | Show this help |
+```
 
 ## Important: You ARE the summarizer
 
@@ -81,13 +111,11 @@ tokens, and produces better results because you have the full pipeline context.
 
 ## First-Time Setup
 
-Use **AskUserQuestion** for all user interaction. Use `tui.py` for display.
+Use **AskUserQuestion** for all user interaction. Display progress in your response.
 
 ### [1/4] Check Dependencies
 
-```bash
-$VENV_PY $SCRIPTS/tui.py setup-progress --step 1 --lang en
-```
+Output: `**[1/4] ✓ Check dependencies**`
 
 Create venv and install deps (uses system Python since venv doesn't exist yet):
 ```bash
@@ -98,9 +126,7 @@ After this, all subsequent commands use `$VENV_PY`.
 
 ### [2/4] Configure Sources
 
-```bash
-$VENV_PY $SCRIPTS/tui.py setup-progress --step 2 --lang en
-```
+Output: `**[2/4] ● Configure sources**`
 
 **AskUserQuestion**: "What Podcast RSS feeds or YouTube channels do you want to track?"
 
@@ -121,9 +147,7 @@ sources:
 
 ### [3/4] Configure Notifications (OPTIONAL)
 
-```bash
-$VENV_PY $SCRIPTS/tui.py setup-progress --step 3 --lang en
-```
+Output: `**[3/4] ● Configure notifications**`
 
 **AskUserQuestion** with radio options:
 
@@ -133,19 +157,12 @@ Would you like to set up notifications?
   ○ Skip for now — digests saved as local Markdown only
 ```
 
-**If Telegram:** show guide, then ask for Bot Token and Chat ID:
-```bash
-$VENV_PY $SCRIPTS/tui.py telegram-guide --lang en
-```
-Save to `daily-digest-config/telegram.yaml`.
-
+**If Telegram:** ask for Bot Token and Chat ID, save to `daily-digest-config/telegram.yaml`.
 **If Skip:** do NOT create `telegram.yaml`.
 
 ### [4/4] Validate
 
-```bash
-$VENV_PY $SCRIPTS/tui.py setup-progress --step 4 --lang en
-```
+Output: `**[4/4] ● Validate setup**`
 
 Test each source with a 1-item fetch:
 ```bash
@@ -163,9 +180,17 @@ Create `daily-digest-config/settings.yaml`:
 language: en
 ```
 
-Show completion with **actual channel names**:
-```bash
-$VENV_PY $SCRIPTS/tui.py setup-complete --data '[{"name":"...","type":"podcast"}]' [--has-telegram] --lang en
+Show completion summary in your response:
+
+```
+## ✅ Setup Complete
+
+**Sources:**
+- 🎙 [podcast] Gooaye 股癌
+- 📺 [youtube] M觀點
+
+**Notifications:** Telegram ✓
+**Next step:** `/daily-digest run`
 ```
 
 ## Status Command
@@ -174,16 +199,37 @@ $VENV_PY $SCRIPTS/tui.py setup-complete --data '[{"name":"...","type":"podcast"}
 $VENV_PY $SCRIPTS/config_loader.py --sources daily-digest-config/sources.yaml --state daily-digest-config/state.json
 ```
 
-Add `has_telegram` (check if telegram.yaml exists), then:
-```bash
-$VENV_PY $SCRIPTS/tui.py status --data 'CONFIG_JSON' --lang en
+Parse the JSON output, check if telegram.yaml exists, then display in your response:
+
+```
+## 📊 Daily Digest Status
+
+| # | Type | Name | URL |
+|---|------|------|-----|
+| 1 | podcast | 股癌 | https://... |
+
+**Notifications:** Telegram ✓
+**Last run:** 2026-03-08
+**Processed:** 42 items
 ```
 
 ## Pipeline Execution
 
-After each step, update the pipeline display so the user sees real-time progress:
-```bash
-$VENV_PY $SCRIPTS/tui.py pipeline --data '[{"name":"Load config","status":"done","detail":"3 sources"},...]' --lang en
+Show progress **in your response text** as you complete each step. Use a checklist
+format that you update by outputting the current state:
+
+```
+**Pipeline Progress:**
+- ✅ Load config — 3 sources
+- ✅ Fetch content — 12 items
+- ⏳ Deduplicate...
+- ○ Transcribe
+- ○ Summarize
+- ○ Cross-analyze
+- ○ Write output
+- ○ Notify
+- ○ Update state
+- ○ Cleanup
 ```
 
 ### Step 1: Load Config & State
@@ -290,15 +336,33 @@ $VENV_PY $SCRIPTS/cleanup.py --workspace daily-digest-workspace/
 
 ### Pipeline Complete
 
-Show digest preview, then completion summary:
-```bash
-$VENV_PY $SCRIPTS/tui.py digest-preview --data 'DIGEST_JSON' --lang en
-$VENV_PY $SCRIPTS/tui.py pipeline-complete --data 'RESULT_JSON' --lang en
-```
+Display the digest preview and completion summary in your response:
 
-The digest-preview `--data` JSON should include: `date`, `summaries` (array),
-`cross_analysis`, `key_numbers`, `sentiment`, `action_items`, `priority_reading`,
-and `digest_path`. See `references/pipeline.md` for full schema.
+```
+## 📰 Daily Digest — 2026-03-08
+
+### 🎙 股癌 — EP.420 標題
+📅 2026-03-08
+**Key Summary:** • point 1 • point 2
+**Key Numbers:** 📊 stat 1
+
+---
+
+## 🔗 Cross-Source Analysis
+### Common Themes
+...
+### Actionable Takeaways
+- 🔍 [Research] ...
+- 🚀 [Try] ...
+
+---
+
+✅ **Pipeline Complete**
+- **Date:** 2026-03-08
+- **New items:** 5 (2 podcast + 3 youtube)
+- **Digest:** `daily-digest-workspace/summaries/2026-03-08.md`
+- **Notification:** ✓ Telegram sent
+```
 
 ## Cleanup Command
 
@@ -306,13 +370,22 @@ Manually trigger workspace cleanup. Useful with `/loop` for automated scheduling
 
 ```bash
 $VENV_PY $SCRIPTS/cleanup.py --workspace daily-digest-workspace/ [--dry-run] [--verbose]
-$VENV_PY $SCRIPTS/tui.py cleanup-result --data 'CLEANUP_JSON' --lang en
+```
+
+Display results in your response:
+
+```
+## 🧹 Workspace Cleanup
+
+- **Deleted:** 12 files
+- **Freed:** 245.3 MB
+- **Kept:** 38 files
+
+💡 Automate with: `/loop 1d /daily-digest cleanup`
 ```
 
 Retention policy: audio kept 1 week, transcripts 1 month, summaries indefinitely.
 Full retention details in `references/pipeline.md`.
-
-**Automation:** `/loop 1d /daily-digest cleanup`
 
 ## Error Handling
 
@@ -329,9 +402,15 @@ $VENV_PY $SCRIPTS/fetch_podcast.py --url "URL" --get-feed-title --output-dir /tm
 $VENV_PY $SCRIPTS/fetch_youtube.py --channel "HANDLE" --get-channel-name --output-dir /tmp/dd-test
 ```
 
-Edit `daily-digest-config/sources.yaml`, validate, then:
-```bash
-$VENV_PY $SCRIPTS/tui.py source-added --data '{"name":"...","type":"...","url":"..."}' --lang en
+Edit `daily-digest-config/sources.yaml`, validate with a 1-item fetch, then display:
+
+```
+## ✅ Source Added
+
+- **Name:** Some Podcast 好節目
+- **Type:** podcast
+- **URL:** https://feeds.soundon.fm/...
+- **Validation:** ✓ Fetched 1 test item
 ```
 
 ## Scheduling

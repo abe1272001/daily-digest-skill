@@ -4,49 +4,52 @@
     {
       "id": 1,
       "prompt": "我想設定 daily digest，幫我追蹤股癌的 podcast 跟 M觀點的 YouTube 頻道，然後摘要傳到我的 Telegram",
-      "expected_output": "引導使用者完成設定：建立 sources.yaml、要 Telegram token/chat_id、檢查依賴、發測試訊息",
+      "expected_output": "引導使用者完成設定，用 markdown 直接顯示進度和結果",
       "files": [],
       "assertions": [
-        {"text": "Uses tui.py setup-progress to show wizard steps", "type": "output_contains"},
-        {"text": "Creates sources.yaml with correct channel names", "type": "output_contains"},
-        {"text": "Uses AskUserQuestion for Telegram setup", "type": "output_contains"},
-        {"text": "Runs all commands via $VENV_PY", "type": "output_contains"}
+        {"text": "Displays setup progress as markdown in response (not via tui.py bash call)", "type": "display"},
+        {"text": "Runs pre-flight venv check before any script", "type": "correctness"},
+        {"text": "Uses AskUserQuestion for user interaction", "type": "workflow"},
+        {"text": "Looks up real channel names via --get-feed-title/--get-channel-name", "type": "correctness"},
+        {"text": "Shows setup-complete summary as markdown table/list in response", "type": "display"},
+        {"text": "All Python commands use $VENV_PY", "type": "correctness"}
       ]
     },
     {
       "id": 2,
       "prompt": "跑一次每日摘要",
-      "expected_output": "按順序執行 pipeline：load config → fetch → dedup → transcribe → summarize → cross-analyze → write dual output (MD+JSON) → notify → update state → cleanup",
+      "expected_output": "執行 pipeline 並用 markdown checklist 顯示進度",
       "files": [],
       "assertions": [
-        {"text": "Pipeline executes all steps in correct order", "type": "output_contains"},
-        {"text": "Summarizes content directly (no claude -p subprocess)", "type": "output_contains"},
-        {"text": "Generates cross-analysis with 6 dimensions (themes, perspectives, sentiment, numbers, action items, priority reading)", "type": "output_contains"},
-        {"text": "Saves both .md and .json output files", "type": "output_contains"},
-        {"text": "Uses --since-days for YouTube fetch", "type": "output_contains"},
-        {"text": "Runs cleanup after pipeline completes", "type": "output_contains"}
+        {"text": "Shows pipeline progress as markdown checklist (✅ ⏳ ○) in response text", "type": "display"},
+        {"text": "Does NOT call tui.py pipeline for progress display", "type": "display"},
+        {"text": "Cross-analysis includes all 6 dimensions", "type": "output"},
+        {"text": "Saves both .md and .json output files", "type": "output"},
+        {"text": "Runs pre-flight venv check", "type": "correctness"},
+        {"text": "Shows digest preview as formatted markdown in response", "type": "display"},
+        {"text": "Shows pipeline-complete summary as markdown in response", "type": "display"}
       ]
     },
     {
       "id": 3,
-      "prompt": "幫我加一個新的 podcast 來源到 daily digest：https://feeds.soundon.fm/podcasts/some-podcast-id",
-      "expected_output": "編輯 sources.yaml 新增來源，做 test fetch 驗證 RSS 可用",
+      "prompt": "/daily-digest help",
+      "expected_output": "顯示 help 表格，不執行 pipeline",
       "files": [],
       "assertions": [
-        {"text": "Looks up real feed title via --get-feed-title", "type": "output_contains"},
-        {"text": "Uses AskUserQuestion to confirm with user", "type": "output_contains"},
-        {"text": "Shows tui.py source-added confirmation", "type": "output_contains"}
+        {"text": "Displays help as markdown table in response (not via tui.py help)", "type": "display"},
+        {"text": "Does NOT execute any pipeline steps", "type": "correctness"},
+        {"text": "Lists all available commands with descriptions", "type": "output"}
       ]
     },
     {
       "id": 4,
-      "prompt": "/daily-digest cleanup --dry-run",
-      "expected_output": "執行 cleanup.py 的 dry-run，顯示會清理的檔案但不實際刪除，用 tui.py 顯示結果",
+      "prompt": "/daily-digest cleanup",
+      "expected_output": "執行 cleanup 並用 markdown 顯示結果",
       "files": [],
       "assertions": [
-        {"text": "Runs cleanup.py with --dry-run flag", "type": "output_contains"},
-        {"text": "Shows cleanup-result via tui.py", "type": "output_contains"},
-        {"text": "Reports deleted files count and freed space", "type": "output_contains"}
+        {"text": "Runs pre-flight venv check", "type": "correctness"},
+        {"text": "Displays cleanup results as markdown in response (not via tui.py)", "type": "display"},
+        {"text": "Mentions /loop automation option", "type": "output"}
       ]
     }
   ]
