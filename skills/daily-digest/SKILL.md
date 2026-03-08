@@ -15,6 +15,7 @@ user-invocable: true
 argument-hint: "[run|setup|add <url>|status|help]"
 metadata:
   author: abe1272001
+  original-author: ray870211
   version: 0.2.0
   license: MIT
 compatibility: >

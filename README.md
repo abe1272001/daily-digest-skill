@@ -5,7 +5,7 @@ An agent skill that autonomously runs a daily content digest pipeline — fetchi
 ## Install
 
 ```bash
-npx skills add ray870211/daily-digest-skill
+npx skills add abe1272001/daily-digest-skill
 ```
 
 ## What it does
@@ -70,6 +70,10 @@ skills/
       pipeline.md         # Architecture deep-dive
       scheduling.md       # Cron/launchd setup
 ```
+
+## Credits
+
+Inspired by [ray870211/daily-digest](https://github.com/ray870211/daily-digest) — the original Python CLI tool for aggregating podcast and YouTube content. This skill reimplements the concept as an agent skill following Anthropic's hybrid execution pattern.
 
 ## License
 
